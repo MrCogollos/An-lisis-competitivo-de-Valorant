@@ -8,6 +8,14 @@
 - [Visualizations](#visualizations)
 - [Future Work](#future-work)
 
+## Limitations
+- Player-level statistics are aggregated at the map level for simplicity.
+- Agent composition is simplified and does not account for full team synergies.
+- Economy and round-level data are not included in the current analysis.
+
+These limitations were intentional to keep the analysis focused on
+map-level performance and model interpretability.
+
 ## Objective
 - Analyze player performance across maps
 - Identify patterns in key performance metrics
