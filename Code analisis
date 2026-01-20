@@ -23,7 +23,7 @@ pysqlDraft = lambda q : sqlDraft(q,globals())
 Map_score = pd.read_csv(r"C:\Users\bastian\Documents\VSC datos\data\Valorant\vct_2025\matches\maps_scores.csv")
 stats_players= pd.read_csv(r"C:\Users\bastian\Documents\VSC datos\data\Valorant\vct_2025\matches\overview.csv")
 
-## 2. Exploratory Analysis
+# 2. Preprocessing
 # Inspect the information of both DataFrames using .info()
 Map_score.info()
 
@@ -49,6 +49,7 @@ stats_players['stats_available'] = stats_players[
 stats_completos = stats_players[stats_players['stats_available']]
 stats_completos
 
+# 3. EDA
 # Create a function to determine the team that won each map
 def Ganador(Map_score):
     if Map_score['Team A Score'] > Map_score['Team B Score']:
@@ -271,6 +272,8 @@ stats_completos = stats_completos.merge(
     how='left'
 )
 
+# 4. Feature Engineering
+
 # Ensure a clean index
 stats_completos = stats_completos.reset_index(drop=True)
 
@@ -385,6 +388,8 @@ results_df.sort_values('ROC_AUC', ascending=False)
 # to analyze feature importance to understand which variables contribute most
 # to the model's decisions.
 
+# 5. Modeling
+
 pipe = Pipeline(steps=[
     ('preprocess', preprocessor),
     ('model', RandomForestClassifier(n_estimators=300, random_state=42))
@@ -427,6 +432,8 @@ sns.barplot(
 plt.title('Random Forest - Top 20 Feature Importances')
 plt.tight_layout()
 plt.show()
+
+# 6. Model Evaluation
 
 # Finally, we predict the probability of winning a map between two teams.
 # The 'Team' variable represents the team of interest, and the returned value
@@ -473,6 +480,7 @@ def predict_match_with_history(pipe, team, opponent, map_name):
     # Return the predicted probability of winning the map
     return pipe.predict_proba(row)[0][1]
 
+# 7. Predictions
 
 # Example prediction
 p = predict_match_with_history(pipe, 'G2 Esports', 'Sentinels', 'Ascent')
