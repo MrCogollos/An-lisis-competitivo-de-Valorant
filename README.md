@@ -1,5 +1,13 @@
 # Valorant Competitive Analysis: Map-Level Performance and Match Outcome Prediction
 
+## Table of Contents
+- [Objective](#objective)
+- [Dataset](#dataset)
+- [Tools](#tools)
+- [Key Findings](#key-findings)
+- [Visualizations](#visualizations)
+- [Future Work](#future-work)
+
 ## Objective
 - Analyze player performance across maps
 - Identify patterns in key performance metrics
