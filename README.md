@@ -1,4 +1,4 @@
-# Valorant Competitive Analysis
+# Valorant Competitive Analysis: Map-Level Performance and Match Outcome Prediction
 
 ## Objective
 - Analyze player performance across maps
@@ -12,15 +12,16 @@
 
 ## Tools
 - Python
-- pandas
-- numpy
-- matplotlib / seaborn
-- scikit-learn (if applicable)
+- pandas, numpy
+- matplotlib, seaborn
+- scikit-learn (modeling, pipelines, evaluation)
 
 ## Key Findings
-- Certain maps show higher average ACS across all players
-- Player ratings vary significantly depending on map choice
-- Missing values required careful preprocessing
+- Player performance varies significantly by map, particularly in ACS and Rating.
+- High-winrate teams show non-random loss patterns against specific opponents.
+- Advanced performance metrics (KAST%, ADR, ACS) are more predictive of map outcomes
+  than raw kill counts alone.
+- Missing values required careful filtering to avoid bias and data leakage.
 
 ### Opponent-based loss patterns (advanced analysis)
 
@@ -67,7 +68,9 @@ with in-game performance factors.
 
 
 ## Future Work
-- Include team-based analysis
-- Add predictive modeling
-- Expand dataset to multiple tournaments
+- Incorporate agent composition and role-based features.
+- Extend predictions to best-of series outcomes.
+- Evaluate temporal effects (meta changes across stages).
+- Explore team-level embeddings instead of one-hot encoding.
+
 
