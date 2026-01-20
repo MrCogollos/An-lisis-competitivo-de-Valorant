@@ -37,7 +37,7 @@ and serves as a deeper exploratory analysis rather than a headline result.
 
   ### Model performance (ROC curve)
 
-![Random Forest ROC Curve]([LINK_DE_LA_IMAGEN](https://github.com/user-attachments/assets/7c0b7556-79af-4f88-adf2-783b5f4fa8c2))
+![Random Forest ROC Curve](https://github.com/user-attachments/assets/7c0b7556-79af-4f88-adf2-783b5f4fa8c2)
 
 
 The ROC curve evaluates the discriminative ability of the Random Forest model
@@ -47,7 +47,7 @@ indicating good separation between wins and losses across different thresholds.
 
   ### Feature importance (Random Forest)
 
-![Top 20 feature importances]([LINK_DE_LA_IMAGEN](https://github.com/user-attachments/assets/10647b52-68a8-44bb-8f88-9448ff362f0b))
+![Top 20 feature importances](https://github.com/user-attachments/assets/10647b52-68a8-44bb-8f88-9448ff362f0b)
 
 
 This visualization shows the top 20 most important features used by the
