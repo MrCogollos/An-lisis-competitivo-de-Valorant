@@ -1,0 +1,255 @@
+## Import required libraries and machine learning models for this analysis
+
+import polars as pl
+import numpy as np
+import pandas as pd
+import datetime as dt
+import matplotlib.pyplot as plt
+import seaborn as sns
+import scipy.stats as stats
+import math
+# ML Models
+from sklearn.model_selection import GroupShuffleSplit
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve
+pysqlDraft = lambda q : sqlDraft(q,globals())
+
+## 1. Data Loading
+Map_score = pd.read_csv(r"C:\Users\bastian\Documents\VSC datos\data\Valorant\vct_2025\matches\maps_scores.csv")
+stats_players= pd.read_csv(r"C:\Users\bastian\Documents\VSC datos\data\Valorant\vct_2025\matches\overview.csv")
+
+## 2. Exploratory Analysis
+# Inspect the information of both DataFrames using .info()
+Map_score.info()
+
+# Inspect the information of both DataFrames using .info()
+stats_players.info()
+
+# Some matches do not contain advanced metrics (Rating, ACS, ADR, KAST)
+# due to limitations of the data source (VLR.gg), such as walkovers,
+# older matches, or special tournament formats.
+# These observations were not artificially imputed in order to avoid
+# introducing bias into the analysis.
+
+# For exploratory analysis, all observations were retained,
+# while for predictive modeling only matches with complete
+# statistics were filtered.
+stats_players['stats_available'] = stats_players[
+    ['Rating', 'Average Combat Score', 'Average Damage Per Round', 'Kill, Assist, Trade, Survive %']
+].notna().all(axis=1)
+
+# This allows us to obtain a clean dataset with complete data,
+# which can be used to group by team, tournament, map, among others,
+# and to build predictive models.
+stats_completos = stats_players[stats_players['stats_available']]
+stats_completos
+
+# Create a function to determine the team that won each map
+def Ganador(Map_score):
+    if Map_score['Team A Score'] > Map_score['Team B Score']:
+        return Map_score['Team A']
+    elif Map_score['Team A Score'] < Map_score['Team B Score']:
+        return Map_score['Team B']
+    else:
+        return 'Draw'
+    
+Map_score['Ganador'] = Map_score.apply(Ganador, axis=1)
+Map_score
+
+# Reset the index to avoid issues when merging columns
+# from both datasets using the .merge() method
+stats_completos = stats_completos.reset_index()
+
+stats_completos = stats_completos.merge(
+    Map_score[['Tournament', 'Match Name', 'Map', 'Ganador']],
+    on=['Tournament', 'Match Name', 'Map'],
+    how='left'
+)
+
+# Remove rows where the side ('Side') is attacker or defender,
+# keeping only the final match result labeled as 'Both'
+# for a more general analysis
+stats_completos = stats_completos.drop(
+    stats_completos[stats_completos['Side'].isin(['attack', 'defend'])].index
+)
+
+# Finally, drop the 'Side' column since the only remaining
+# information it contains is 'both'
+stats_completos = stats_completos.drop(columns={'Side'})
+
+# Classify match regions into the four main regions,
+# grouping international tournaments such as Masters and Champions
+regiones = {
+    'China': 'CHINA',
+    'EMEA': 'EMEA',
+    'Pacific': 'PACIFIC',
+    'Americas': 'AMERICAS',
+    'Champions': 'INTERNATIONAL',
+    'Masters Toronto': 'INTERNATIONAL',
+    'Masters Bangkok': 'INTERNATIONAL',
+}
+
+def Region(tournament):
+    for keyword, region in regiones.items():
+        if keyword.lower() in tournament.lower():
+            return region
+    return 'INTERNATIONAL'
+
+stats_completos['Region'] = stats_completos['Tournament'].apply(Region)
+
+# Rename column names for better visual readability,
+# since the meaning of these metrics is already known
+stats_completos = stats_completos.rename(
+    columns={
+        'Kill, Assist, Trade, Survive %': 'KAST%',
+        'Headshot %': 'HS%',
+        'Average Damage Per Round': 'ADR',
+        'Average Combat Score': 'ACS',
+        'First Kills': 'FK',
+        'First Deaths': 'FD',
+        'Kills - Deaths (FKD)': 'FKD',
+        'Kills - Deaths (KD)': 'KD'
+    }
+)
+
+# Reset the DataFrames to avoid compatibility issues when using .merge()
+stats_completos = stats_completos.reset_index(drop=True)
+Map_score = Map_score.reset_index(drop=True)
+
+# Reset the DataFrames to avoid compatibility issues when using .merge()
+stats_completos = stats_completos.reset_index(drop=True)
+Map_score = Map_score.reset_index(drop=True)
+
+# Identify the opponent team for each player by grouping
+# matches at the map level
+def get_opponent(group):
+    # Create a safe copy to avoid SettingWithCopyWarning
+    group = group.copy()
+
+    teams = group['Team'].unique()
+
+    # Case: exactly 2 teams (normal scenario)
+    if len(teams) == 2:
+        team_map = {teams[0]: teams[1], teams[1]: teams[0]}
+
+    # Edge case: only 1 team (data issue)
+    elif len(teams) == 1:
+        team_map = {teams[0]: None}
+
+    # Edge case: more than 2 teams (grouping issue)
+    else:
+        team_map = {t: None for t in teams}
+
+    group['Opponent'] = group['Team'].map(team_map)
+
+    return group
+
+stats_completos = (
+    stats_completos
+    .groupby(['Tournament', 'Match Name', 'Map'], group_keys=False)
+    .apply(get_opponent)
+)
+
+# Classify columns into categorical and numerical variables
+letras = {
+    'Tournament', 'Stage', 'Match Type', 'Match Name', 'Map',
+    'Player', 'Team', 'Agents', 'Opponent', 'Region',
+    'Ganador', 'stats_disponibles'
+}
+numeros = {'Rating', 'ACS', 'KD', 'KAST%', 'ADR', 'HS%', 'FK', 'FD', 'FKD'}
+
+# Since HS% and KAST% are percentage-based metrics,
+# convert their values to float for numerical analysis
+def clean_percent_value(x):
+    if pd.isna(x):
+        return None
+
+    x = str(x).strip().replace("%", "")
+
+    if x == "":
+        return None
+
+    return float(x)
+
+for col in ['KAST%', 'HS%']:
+    stats_completos[col] = stats_completos[col].apply(clean_percent_value)
+
+# Compute the correlation matrix of numerical statistics
+stats_completos.drop(letras, axis=1).corr()
+
+# As observed, Rating—which represents overall round impact—
+# shows strong correlation with KAST%, KD, ACS, and ADR,
+# indicating that these metrics are key contributors to player performance.
+
+# Count how many maps were played per match
+map_count = (
+    Map_score
+    .groupby(['Tournament', 'Match Name'])
+    .size()
+    .reset_index(name='Map_count')
+)
+
+# Keep only matches with two or more maps to exclude showmatches
+valid_matches = map_count[map_count['Map_count'] >= 2][
+    ['Tournament', 'Match Name']
+]
+
+# Filter Map_score to include only valid matches
+Map_score = Map_score.merge(
+    valid_matches,
+    on=['Tournament', 'Match Name'],
+    how='inner'
+)
+Map_score
+
+# Avoid metric inflation caused by aggregated map rows,
+# since 'All Maps' is repeated once per player (10 times per match)
+stats_completos = stats_completos[
+    stats_completos['Map'] != 'All Maps'
+]
+
+# Total number of maps played per team
+maps_played = pd.concat([
+    Map_score[['Team A']].rename(columns={'Team A': 'Team'}),
+    Map_score[['Team B']].rename(columns={'Team B': 'Team'})
+])
+
+maps_played = maps_played.value_counts().reset_index(name='Maps_played')
+
+# Maps won by each team (without considering direct matchups)
+maps_won = Map_score['Ganador'].value_counts().reset_index()
+maps_won.columns = ['Team', 'Maps_won']
+
+# Merge the previously created datasets and compute the winrate
+winrate = maps_played.merge(maps_won, on='Team', how='left').fillna(0)
+winrate['Winrate (%)'] = 100 * winrate['Maps_won'] / winrate['Maps_played']
+
+winrate = winrate.sort_values('Winrate (%)', ascending=False)
+
+# Add lost maps for a more complete and interpretable overview
+winrate['Maps_lost'] = winrate['Maps_played'] - winrate['Maps_won']
+winrate = winrate[['Team', 'Maps_played', 'Maps_won', 'Maps_lost', 'Winrate (%)']]
+
+# Finally, create a bar chart for quick visual analysis.
+# Alternatively, the 'winrate' table can be inspected directly
+# for a more detailed team-level analysis
+winrate.sort_values('Maps_won', ascending=False).set_index('Team')[['Maps_won', 'Maps_lost']].plot(
+    kind='bar',
+    stacked=True,
+    figsize=(10, 5),
+    color=['#1f77b4', '#d62728']
+)
+
+plt.title("Maps won vs lost by team")
+plt.ylabel("Number of maps")
+plt.xticks(rotation=90)
+plt.tight_layout()
+plt.show()
+
+
+
