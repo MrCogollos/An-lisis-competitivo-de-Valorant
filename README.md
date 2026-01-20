@@ -22,6 +22,19 @@
 - Player ratings vary significantly depending on map choice
 - Missing values required careful preprocessing
 
+### Opponent-based loss patterns (advanced analysis)
+
+![Maps lost by opponent](https://github.com/user-attachments/assets/890e405a-8719-4454-af3a-da45de6aa882)
+
+This visualization compares map losses by opponent for high-winrate teams.
+It highlights potential counter-play styles and matchup dependencies,
+and serves as a deeper exploratory analysis rather than a headline result.
+
+**Key insights:**
+- Certain opponents systematically dominate specific map pools.
+- Loss distribution suggests preparation gaps rather than random variance.
+- This pattern could be used to adjust veto strategies or training focus.
+
 ## Future Work
 - Include team-based analysis
 - Add predictive modeling
