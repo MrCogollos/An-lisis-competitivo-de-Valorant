@@ -251,5 +251,232 @@ plt.xticks(rotation=90)
 plt.tight_layout()
 plt.show()
 
+# Select relevant columns to create a binary match outcome variable (1 = win, 0 = loss)
+GP = (
+    stats_completos[['Tournament', 'Match Name', 'Match Type', 'Team', 'Opponent', 'Ganador']]
+    .drop_duplicates()
+)
 
+# Binary match-level outcome: 1 if the team won the match, 0 otherwise
+GP['match_win'] = (GP['Team'] == GP['Ganador']).astype(int)
+
+# Reset indices to ensure clean merges
+stats_completos = stats_completos.reset_index(drop=True)
+GP = GP.reset_index(drop=True)
+
+# Merge match-level outcome back into the full dataset
+stats_completos = stats_completos.merge(
+    GP[['Tournament', 'Match Name', 'Team', 'Opponent', 'match_win']],
+    on=['Tournament', 'Match Name', 'Team', 'Opponent'],
+    how='left'
+)
+
+# Ensure a clean index
+stats_completos = stats_completos.reset_index(drop=True)
+
+# Remove rows without actual player statistics
+stats_completos = stats_completos[stats_completos['stats_disponibles'] == True]
+
+# Remove aggregated map entries
+stats_completos = stats_completos[stats_completos['Map'] != 'All Maps']
+
+target = 'match_win'
+
+# ❌ Forbidden variables (data leakage / identifiers)
+drop_cols = [
+    'match_win',
+    'Ganador',        # Contains the true match outcome
+    'Match Name',     # Identifies the match
+    'Player',         # Player-level identifiers (risk of memorization)
+    'index'
+]
+
+X = stats_completos.drop(columns=drop_cols, errors='ignore')
+y = stats_completos[target]
+
+# Numerical features
+numeric_features = [
+    'Rating', 'ACS', 'Kills', 'Deaths', 'Assists',
+    'KD', 'ADR', 'KAST%', 'HS%', 'FK', 'FD', 'FKD'
+]
+
+# Categorical features
+categorical_features = [
+    'Tournament', 'Stage', 'Match Type',
+    'Map', 'Team', 'Opponent', 'Agents', 'Region'
+]
+
+# Preprocessing pipeline: scaling for numerical features
+# and one-hot encoding for categorical features
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_features)
+    ]
+)
+
+# Group-based split to prevent match-level data leakage
+gss = GroupShuffleSplit(test_size=0.2, random_state=42)
+
+train_idx, test_idx = next(
+    gss.split(X, y, groups=stats_completos['Match Name'])
+)
+
+X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+# Models to be evaluated
+models = {
+    'Logistic Regression': LogisticRegression(max_iter=1000),
+    'Random Forest': RandomForestClassifier(n_estimators=300, random_state=42),
+    'Gradient Boosting': GradientBoostingClassifier(n_estimators=300, random_state=42)
+}
+
+results = {}
+
+for name, model in models.items():
+    print(f"\n========== {name} ==========")
+
+    pipe = Pipeline(steps=[
+        ('preprocess', preprocessor),
+        ('model', model)
+    ])
+
+    # Train the model
+    pipe.fit(X_train, y_train)
+
+    # Predictions
+    y_pred = pipe.predict(X_test)
+    y_prob = pipe.predict_proba(X_test)[:, 1]
+
+    # Classification metrics
+    print(classification_report(y_test, y_pred))
+
+    # ROC-AUC score
+    roc_auc = roc_auc_score(y_test, y_prob)
+    results[name] = roc_auc
+
+    # Confusion Matrix
+    cm = pd.crosstab(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'{name} - Confusion Matrix')
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.show()
+
+    # ROC Curve
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    plt.plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}')
+    plt.plot([0, 1], [0, 1], '--', color='gray')
+    plt.title(f'{name} - ROC Curve')
+    plt.legend()
+    plt.show()
+
+# Compare model performance
+results_df = pd.DataFrame.from_dict(results, orient='index', columns=['ROC_AUC'])
+results_df.sort_values('ROC_AUC', ascending=False)
+
+# The objective is to compare multiple predictive models
+# and determine which one provides the best performance
+# for match outcome prediction
+
+# Finally, as observed in the previous evaluation, the Random Forest model
+# provides the best predictive performance in our case. Therefore, we proceed
+# to analyze feature importance to understand which variables contribute most
+# to the model's decisions.
+
+pipe = Pipeline(steps=[
+    ('preprocess', preprocessor),
+    ('model', RandomForestClassifier(n_estimators=300, random_state=42))
+])
+
+# Train the Random Forest model
+pipe.fit(X_train, y_train)
+
+rf_model = pipe.named_steps['model']
+preprocess = pipe.named_steps['preprocess']
+
+# Numerical feature names (remain unchanged)
+num_features = numeric_features
+
+# One-hot encoded categorical feature names
+cat_features = preprocess.named_transformers_['cat'].get_feature_names_out(categorical_features)
+
+# Final feature set used by the model
+feature_names = np.concatenate([num_features, cat_features])
+
+# Extract feature importances from the trained Random Forest
+importances = rf_model.feature_importances_
+
+feat_imp = (
+    pd.DataFrame({
+        'Feature': feature_names,
+        'Importance': importances
+    })
+    .sort_values('Importance', ascending=False)
+)
+
+# Plot the top 20 most important features
+plt.figure(figsize=(12, 6))
+sns.barplot(
+    data=feat_imp.head(20),
+    x='Importance',
+    y='Feature',
+    palette='viridis'
+)
+plt.title('Random Forest - Top 20 Feature Importances')
+plt.tight_layout()
+plt.show()
+
+# Finally, we predict the probability of winning a map between two teams.
+# The 'Team' variable represents the team of interest, and the returned value
+# corresponds to the model-estimated probability of victory.
+
+def predict_match_with_history(pipe, team, opponent, map_name):
+    # Retrieve historical average statistics for the given team and map
+    row_stats = team_map_avg[
+        (team_map_avg['Team'] == team) &
+        (team_map_avg['Map'] == map_name)
+    ]
+
+    # If no historical data is available, the prediction cannot be computed
+    if row_stats.empty:
+        raise ValueError('No historical data available for this team and map')
+
+    r = row_stats.iloc[0]
+
+    # Construct a single-row dataframe matching the model input schema
+    row = pd.DataFrame([{
+        'Tournament': 'VCT 2025: Americas Stage 1',
+        'Stage': 'Playoffs',
+        'Match Type': 'Elimination',
+        'Map': map_name,
+        'Team': team,
+        'Opponent': opponent,
+        'Agents': 'unknown',
+        'Rating': r['Rating'],
+        'ACS': r['ACS'],
+        'Kills': r['Kills'],
+        'Deaths': r['Deaths'],
+        'Assists': r['Assists'],
+        'KD': r['KD'],
+        'ADR': r['ADR'],
+        'KAST%': r['KAST%'],
+        'HS%': r['HS%'],
+        'FK': r['FK'],
+        'FD': r['FD'],
+        'FKD': r['FKD'],
+        'stats_disponibles': True,
+        'Region': 'AMERICAS'
+    }])
+
+    # Return the predicted probability of winning the map
+    return pipe.predict_proba(row)[0][1]
+
+
+# Example prediction
+p = predict_match_with_history(pipe, 'G2 Esports', 'Sentinels', 'Ascent')
+print(f'Probability of G2 Esports winning: {p:.2%}')
+
+result: Probability of G2 Esports to win: 60.34%
 
