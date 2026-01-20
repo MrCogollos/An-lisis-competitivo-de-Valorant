@@ -35,6 +35,37 @@ and serves as a deeper exploratory analysis rather than a headline result.
 - Loss distribution suggests preparation gaps rather than random variance.
 - This pattern could be used to adjust veto strategies or training focus.
 
+  ### Model performance (ROC curve)
+
+![Random Forest ROC Curve]([LINK_DE_LA_IMAGEN](https://github.com/user-attachments/assets/7c0b7556-79af-4f88-adf2-783b5f4fa8c2))
+
+
+The ROC curve evaluates the discriminative ability of the Random Forest model
+to predict map-level outcomes. The model achieves a strong ROC-AUC score,
+indicating good separation between wins and losses across different thresholds.
+
+
+  ### Feature importance (Random Forest)
+
+![Top 20 feature importances]([LINK_DE_LA_IMAGEN](https://github.com/user-attachments/assets/10647b52-68a8-44bb-8f88-9448ff362f0b))
+
+
+This visualization shows the top 20 most important features used by the
+Random Forest model to predict map outcomes.
+
+**Key observations:**
+- Performance metrics such as Rating, ACS, KAST%, ADR and KD are the strongest
+  contributors to map-level win probability.
+- Contextual categorical variables (Map, Team, Opponent, Region) also play a
+  significant role after one-hot encoding.
+- The results align with competitive intuition: consistent round impact and
+  efficiency matter more than raw kill counts alone.
+
+This analysis improves model transparency and helps connect statistical results
+with in-game performance factors.
+
+
+
 ## Future Work
 - Include team-based analysis
 - Add predictive modeling
